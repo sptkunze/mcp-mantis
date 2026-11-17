@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { basename, resolve } from 'node:path';
+
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
@@ -338,7 +341,7 @@ export function registerIssueTools(server: McpServer, client: MantisRestClient):
     {
       title: 'Get issue attachment',
       description:
-        'Downloads an attachment of an issue. Image attachments are returned as a viewable image; other files as base64 with metadata. Find file ids in an issue\'s "attachments" array.',
+        'Downloads an attachment of an issue. Without save_dir, image attachments are returned as a viewable image and other files as base64 with metadata. With save_dir, the file is written to that local directory and only its path and metadata are returned — prefer this for large or non-image files (logs, archives, documents). Find file ids in an issue\'s "attachments" array and in each note\'s "attachments" array (files added with a note appear only there).',
       inputSchema: {
         issue_id: z.number().int().positive(),
         file_id: z
@@ -346,10 +349,17 @@ export function registerIssueTools(server: McpServer, client: MantisRestClient):
           .int()
           .positive()
           .describe('Attachment id from the issue "attachments" array.'),
+        save_dir: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            'Local directory to save the attachment into (created if missing). Relative paths resolve against the server working directory; prefer absolute paths.',
+          ),
       },
       annotations: READ_ONLY,
     },
-    handler(async ({ issue_id, file_id }) => {
+    handler(async ({ issue_id, file_id, save_dir }) => {
       const file = await client.getAttachment(issue_id, file_id);
       const meta = {
         id: file.id,
@@ -359,6 +369,17 @@ export function registerIssueTools(server: McpServer, client: MantisRestClient):
         issue_id,
         view_url: client.buildIssueViewUrl(issue_id),
       };
+      if (save_dir !== undefined) {
+        const dir = resolve(save_dir);
+        await mkdir(dir, { recursive: true });
+        // basename() strips any directory parts a filename might carry (e.g. "../x").
+        const safeName = basename(file.filename.replace(/\\/g, '/')) || `attachment-${file.id}`;
+        const path = resolve(dir, safeName);
+        await writeFile(path, Buffer.from(file.base64, 'base64'));
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ ...meta, saved_path: path }) }],
+        };
+      }
       if (file.mediaType.startsWith('image/')) {
         return {
           content: [

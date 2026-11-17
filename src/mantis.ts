@@ -305,6 +305,18 @@ export class MantisRestClient {
     }
   }
 
+  /**
+   * With a Basic Auth guard in front of Mantis, both credentials share one header:
+   * `Basic <b64>, <token>`. Apache evaluates the Basic part; Mantis splits at ", "
+   * and takes the first valid token. The token is sent without a `Bearer ` prefix.
+   */
+  private authorizationHeader(): string {
+    if (this.cfg.basicAuthUser.length === 0) return this.cfg.token;
+    const credentials = `${this.cfg.basicAuthUser}:${this.cfg.basicAuthPassword}`;
+    const basic = `Basic ${Buffer.from(credentials, 'utf8').toString('base64')}`;
+    return `${basic}, ${this.cfg.token}`;
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -318,7 +330,7 @@ export class MantisRestClient {
     const url = `${this.cfg.baseUrl}${path}${qs}`;
 
     const headers: Record<string, string> = {
-      Authorization: this.cfg.token,
+      Authorization: this.authorizationHeader(),
       Accept: 'application/json',
     };
     if (body !== undefined) headers['Content-Type'] = 'application/json';

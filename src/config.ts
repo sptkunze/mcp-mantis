@@ -72,6 +72,12 @@ export const config = {
     /** MantisBT API token (My Account -> API Tokens). Sent as the `Authorization` header. */
     token: (process.env.MANTIS_TOKEN ?? '').trim(),
     /**
+     * Optional HTTP Basic Auth in front of Mantis (e.g. an Apache .htaccess guard).
+     * When set, Basic credentials and the API token share the `Authorization` header.
+     */
+    basicAuthUser: (process.env.MANTIS_BASIC_AUTH_USER ?? '').trim(),
+    basicAuthPassword: process.env.MANTIS_BASIC_AUTH_PASSWORD ?? '',
+    /**
      * When true, write tools are not registered and the client refuses mutations.
      * Defaults to false: this server is built for issue *resolvers* (status changes,
      * notes, assignment), so write access is the primary use case.
